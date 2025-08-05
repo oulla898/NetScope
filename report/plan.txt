@@ -9,6 +9,7 @@ USB cable for serial communication
 Optional: SD Card Module (for local logging)
 Serial Monitor Tool (Arduino IDE, PuTTY, or RealTerm)
 📅 6-Week Project Timeline
+
 ✅ Week 1: Project Setup & Wi-Fi Frame Fundamentals
 Goals:
 Learn Wi-Fi frame types: Beacon, Probe Request, Authentication, etc.
@@ -17,6 +18,7 @@ Load basic Wi-Fi sniffing example and print raw frame metadata over serial.
 Deliverables:
 Working development setup.
 Captured frames with channel, MAC, RSSI, frame type (printed over UART).
+
 ✅ Week 2: Frame Filtering and Frame Type Classification
 Goals:
 Implement frame-type filtering (e.g., only show Probe Requests).
@@ -36,6 +38,7 @@ Count total unique devices and group by signal strength range (e.g., strong, med
 Deliverables:
 Channel-hopping sniffer with per-device tracking.
 Serial output or table summarizing active devices.
+
 ✅ Week 4: Anomaly Detection (DoS / Deauth / Probe Flood)
 Goals:
 Detect suspicious activity:

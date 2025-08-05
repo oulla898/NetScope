@@ -80,7 +80,7 @@
       </div>
       <div class="header-right">
         <label>Weekly Report</label><br>
-        Week #: <input type="text" style="width:30px;" value="2"> <br>
+        Week #: <input type="text" style="width:30px;" value="4"> <br>
         Date: <input type="text" id="dateField" style="width:70px;" readonly> <!-- Auto-filled date -->
       </div>
     </div>
@@ -107,7 +107,7 @@
       <tr>
         <td rowspan="2" class="vert-label vert-label-sup">Supervisor</td>
         <td>Full Name: <input type="text" style="width:220px;"></td>
-        <td>Email: <input type="text" style="width:120px;"></td>
+        <td>Email: <input type="text" style="width:180px;"></td>
       </tr>
       <tr>
         <td>Training Company &amp; Department: <input type="text" style="width:180px;" value="Ege University"></td>
@@ -116,22 +116,22 @@
     </table>
     <div class="tasks-section">Tasks Completed (Briefly Describe any tasks that you completed during this week):</div>
     <table class="tasks-table">
-      <tr><td><input type="text" style="width:99%;" value="Improved WiFi sniffer output: now shows frame type, subtype, and BSSID"></td><td><input type="text" style="width:99%;" value="Enhanced filtering and classification of 802.11 frames"></td></tr>
-      <tr><td><input type="text" style="width:99%;" value="Output format is more readable and includes SSID if available"></td><td><input type="text" style="width:99%;" value="Fixed environment issues for PlatformIO CLI usage"></td></tr>
-      <tr><td><input type="text" style="width:99%;" value="Tested and documented code for week 2 deliverables"></td><td><input type="text" style="width:99%;" value=""></td></tr>
+      <tr><td><input type="text" style="width:99%;" value="Implemented real-time anomaly detection system"></td><td><input type="text" style="width:99%;" value="Added probe flood detection (10+ probes in 30s)"></td></tr>
+      <tr><td><input type="text" style="width:99%;" value="Added deauth attack detection (5+ deauths in 10s)"></td><td><input type="text" style="width:99%;" value="Implemented beacon flood monitoring (50+ beacons in 30s)"></td></tr>
+      <tr><td><input type="text" style="width:99%;" value="Added association flood detection (10+ attempts in 30s)"></td><td><input type="text" style="width:99%;" value="Implemented channel hopping detection (5+ channels in 10s)"></td></tr>
     </table>
     <div class="progress-section">Tasks in Progress (if any):</div>
     <table class="tasks-table">
-      <tr><td><input type="text" style="width:99%;" value="Device tracking and MAC registry"></td><td><input type="text" style="width:99%;" value="Anomaly detection (probe bursts, deauth)"></td></tr>
-      <tr><td><input type="text" style="width:99%;" value="Signal strength grouping"></td><td><input type="text" style="width:99%;" value="Activity statistics and reporting"></td></tr>
+      <tr><td><input type="text" style="width:99%;" value="Smart serial output control system"></td><td><input type="text" style="width:99%;" value="Threat visualization on display"></td></tr>
+      <tr><td><input type="text" style="width:99%;" value="Advanced packet filtering"></td><td><input type="text" style="width:99%;" value="Real-time alert system"></td></tr>
     </table>
     <div class="plan-section">Plan for next week (if different from this week):</div>
     <table class="plan-table">
-      <tr><td><input type="text" style="width:99%;" value="Implement device tracking and MAC address registry"></td><td><input type="text" style="width:99%;" value="Add signal strength grouping (strong, medium, weak)"></td></tr>
-      <tr><td><input type="text" style="width:99%;" value="Develop anomaly detection"></td><td><input type="text" style="width:99%;" value="Create device activity statistics and reporting"></td></tr>
+      <tr><td><input type="text" style="width:99%;" value="Add new THREATS display card"></td><td><input type="text" style="width:99%;" value="Implement smart serial output modes"></td></tr>
+      <tr><td><input type="text" style="width:99%;" value="Add anomaly logging commands"></td><td><input type="text" style="width:99%;" value="Create threat visualization interface"></td></tr>
     </table>
     <div class="problems-section">Problems/Challenges/Recommendations (if any):</div>
-    <textarea class="problems-box">Initial output was very noisy with too many frames - solved with smart filtering. Understanding WiFi frame structure and MAC address positioning. Managing channel switching timing to capture maximum devices.</textarea>
+    <textarea class="problems-box">Serial output was too verbose - implemented smart output modes (QUIET/NORMAL/VERBOSE). Anomaly detection thresholds needed fine-tuning. Display integration required careful memory management. Threat visualization needed compact design for small screen.</textarea>
     <div class="supervisor-section">Supervisor Comments (your feedback is very important for our continuing improvement):</div>
     <textarea class="supervisor-box"></textarea>
     <div class="signatures">

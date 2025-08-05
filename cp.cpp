@@ -1,9 +1,10 @@
+// i belive this version is the latest
 // Project Title: Wi-Fi Packet Sniffer with Professional Display Interface
 // Objective: ESP32 WiFi sniffer with 1.3" ST7789 display showing network intelligence
 //
 // IAESTE Internship - Ege University - Almoulla Al Maawali
 //
-// Simplified Version - Based on cpp.cpp structure with added features
+// Display + WiFi Sniffer Integration with Professional UI - FIXED VERSION
 
 #include <Arduino.h>
 #include <WiFi.h>
@@ -156,15 +157,40 @@ struct AnomalyAlert {
     String details;
 };
 
-// Simple output modes
+// Enhanced Serial output control system
 enum OutputMode { 
     SILENT,     // Only critical alerts
     QUIET,      // Anomalies + new device discoveries  
-    NORMAL,     // Basic summaries (DEFAULT)
-    VERBOSE,    // All packets
-    DEBUG       // Full details
+    NORMAL,     // Intelligent summaries + important events (DEFAULT)
+    VERBOSE,    // Rate-limited packet samples + analysis
+    DEBUG,      // Full technical details (rate-limited)
+    ANALYST     // Professional network intelligence format
 };
 OutputMode current_serial_mode = NORMAL;
+
+// Rate limiting and smart filtering
+struct SerialRateLimit {
+    unsigned long last_print_time = 0;
+    int print_count = 0;
+    unsigned long window_start = 0;
+    static const int MAX_PRINTS_PER_SECOND = 5;
+    static const int WINDOW_SIZE_MS = 1000;
+};
+
+SerialRateLimit packet_rate_limiter;
+SerialRateLimit event_rate_limiter;
+
+// Event tracking for intelligent notifications
+struct NotificationEvent {
+    String type;
+    String message;
+    unsigned long timestamp;
+    int priority; // 1=critical, 2=important, 3=info
+};
+
+std::vector<NotificationEvent> recent_events;
+unsigned long last_dashboard_update = 0;
+unsigned long last_intelligence_report = 0;
 
 // Anomaly detection thresholds
 #define PROBE_FLOOD_THRESHOLD 10
@@ -378,7 +404,9 @@ void update_ap_client_associations() {
 }
 
 // Forward declarations for functions used by anomaly detection
-void add_notification(const String& type, const String& message);
+void add_notification(const String& type, const String& message, int priority = 2);
+void print_notification(const NotificationEvent& event);
+bool should_print_event(int priority);
 
 // Anomaly detection functions
 void track_anomaly(const String& mac, const String& frame_type, int channel) {
@@ -472,7 +500,7 @@ void check_anomaly_thresholds() {
             // Use new notification system for anomaly alerts
             String alert_msg = String(threat_type) + " from " + tracker.mac.substring(9) + 
                              " (count: " + count + ")";
-            add_notification("THREAT_DETECTED", alert_msg);
+            add_notification("THREAT_DETECTED", alert_msg, 1); // Critical priority
         }
     }
     
@@ -490,51 +518,300 @@ void check_anomaly_thresholds() {
     }
 }
 
-// Simple notification function
-void add_notification(const String& type, const String& message) {
+// Smart rate limiting function
+bool can_print_with_rate_limit(SerialRateLimit& limiter) {
+    unsigned long now = millis();
+    
+    // Reset window if needed
+    if (now - limiter.window_start >= SerialRateLimit::WINDOW_SIZE_MS) {
+        limiter.window_start = now;
+        limiter.print_count = 0;
+    }
+    
+    // Check if we can print
+    if (limiter.print_count < SerialRateLimit::MAX_PRINTS_PER_SECOND) {
+        limiter.print_count++;
+        limiter.last_print_time = now;
+        return true;
+    }
+    
+    return false;
+}
+
+// Add notification event to queue
+void add_notification(const String& type, const String& message, int priority) {
+    // SILENT mode: NO NOTIFICATIONS AT ALL
     if (current_serial_mode == SILENT) return;
     
+    NotificationEvent event;
+    event.type = type;
+    event.message = message;
+    event.timestamp = millis();
+    event.priority = priority;
+    
+    recent_events.push_back(event);
+    
+    // Keep only recent events (max 20)
+    if (recent_events.size() > 20) {
+        recent_events.erase(recent_events.begin());
+    }
+    
+    // Print immediately if important enough for current mode
+    if (should_print_event(priority)) {
+        print_notification(event);
+    }
+}
+
+// Professional notification formatter
+void print_notification(const NotificationEvent& event) {
+    // SILENT mode: NO NOTIFICATIONS AT ALL
+    if (current_serial_mode == SILENT) return;
+    
+    if (!can_print_with_rate_limit(event_rate_limiter)) return;
+    
     char time_str[16];
-    unsigned long seconds = millis() / 1000;
+    unsigned long seconds = event.timestamp / 1000;
     int hours = seconds / 3600;
     int minutes = (seconds % 3600) / 60;
     int secs = seconds % 60;
     sprintf(time_str, "%02d:%02d:%02d", hours, minutes, secs);
     
-    Serial.printf("[%s] %s: %s\n", time_str, type.c_str(), message.c_str());
+    String priority_icon;
+    switch (event.priority) {
+        case 1: priority_icon = "🚨"; break; // Critical
+        case 2: priority_icon = "⚠️ "; break; // Important  
+        case 3: priority_icon = "ℹ️ "; break; // Info
+        default: priority_icon = "🔸"; break;
+    }
+    
+    Serial.printf("[%s] %s %s: %s\n", time_str, priority_icon.c_str(), 
+                  event.type.c_str(), event.message.c_str());
 }
 
-// Simple mode control
+// Enhanced serial mode control
 void set_serial_mode(OutputMode mode) {
     current_serial_mode = mode;
-    Serial.printf("Mode changed to: ");
+    
+    // Clear screen for better readability
+    Serial.print("\033[2J\033[H");
+    
+    Serial.println("\n" + String(60, '='));
+    Serial.printf("📱 SERIAL MODE CHANGED\n");
+    Serial.println(String(60, '='));
+    
     switch (mode) {
-        case SILENT: Serial.println("SILENT"); break;
-        case QUIET: Serial.println("QUIET"); break;
-        case NORMAL: Serial.println("NORMAL"); break;
-        case VERBOSE: Serial.println("VERBOSE"); break;
-        case DEBUG: Serial.println("DEBUG"); break;
+        case SILENT:
+            Serial.println("🔇 SILENT: Only critical system alerts");
+            break;
+        case QUIET:
+            Serial.println("🤫 QUIET: Anomalies + new device discoveries");
+            break;
+        case NORMAL:
+            Serial.println("📊 NORMAL: Intelligent summaries + important events");
+            break;
+        case VERBOSE:
+            Serial.println("📋 VERBOSE: Rate-limited packet samples + analysis");
+            break;
+        case DEBUG:
+            Serial.println("🔧 DEBUG: Full technical details (rate-limited)");
+            break;
+        case ANALYST:
+            Serial.println("🕵️ ANALYST: Professional network intelligence format");
+            break;
+    }
+    
+    Serial.printf("Rate Limit: Max %d prints per second\n", SerialRateLimit::MAX_PRINTS_PER_SECOND);
+    Serial.println(String(60, '='));
+    
+    // Reset rate limiters
+    packet_rate_limiter = SerialRateLimit();
+    event_rate_limiter = SerialRateLimit();
+}
+
+// Smart filtering for events
+bool should_print_event(int priority) {
+    // SILENT mode: NO EVENTS AT ALL (not even critical)
+    if (current_serial_mode == SILENT) return false;
+    
+    switch (current_serial_mode) {
+        case QUIET: return priority <= 2; // Critical + important
+        case NORMAL: return priority <= 2; // Critical + important
+        case VERBOSE: return priority <= 3; // All events
+        case DEBUG: return priority <= 3; // All events
+        case ANALYST: return priority <= 2; // Critical + important
+        default: return false;
     }
 }
 
-// Simple packet filtering
+// Smart packet filtering - only print significant packets
 bool should_print_packet() {
+    // COMPLETELY DISABLE ALL PACKET PRINTING IN SILENT MODE
     if (current_serial_mode == SILENT) return false;
     if (current_serial_mode == QUIET) return false;
-    if (current_serial_mode == NORMAL) return false;
-    return (current_serial_mode == VERBOSE || current_serial_mode == DEBUG);
+    if (current_serial_mode == NORMAL) return false; // Normal mode doesn't show individual packets
+    
+    // Only allow in VERBOSE/DEBUG modes with strict rate limiting
+    if (current_serial_mode == VERBOSE || current_serial_mode == DEBUG) {
+        return can_print_with_rate_limit(packet_rate_limiter);
+    }
+    
+    return false; // Default: no packet printing
 }
 
-// Simple device notification
+bool should_print_summary() {
+    return current_serial_mode != SILENT;
+}
+
+// Professional live dashboard
+void print_live_dashboard() {
+    // SILENT mode: NO DASHBOARD AT ALL
+    if (current_serial_mode == SILENT) return;
+    if (current_serial_mode != ANALYST && millis() - last_dashboard_update < 10000) return;
+    
+    last_dashboard_update = millis();
+    
+    // Dashboard header
+    Serial.print("\033[2J\033[H"); // Clear screen
+    Serial.println("┌─ ESP32 WiFi Intelligence System ────────────────────┐");
+    
+    // Time and uptime
+    unsigned long uptime = millis() / 1000;
+    int hours = uptime / 3600;
+    int minutes = (uptime % 3600) / 60;
+    int secs = uptime % 60;
+    
+    char time_str[32];
+    sprintf(time_str, "🕐 %02d:%02d:%02d | Uptime: %02d:%02d:%02d", 
+            hours, minutes, secs, hours, minutes, secs);
+    
+    Serial.printf("│ %-52s │\n", time_str);
+    Serial.println("├─────────────────────────────────────────────────────┤");
+    
+    // Channel and activity
+    int activity_level = min(10, total_frames / max(1, (int)(millis()/1000)));
+    String activity_bar = "";
+    for (int i = 0; i < 10; i++) {
+        activity_bar += (i < activity_level) ? "█" : "▒";
+    }
+    
+    char activity_str[64];
+    sprintf(activity_str, "📡 CH: %d/13 | 🔥 Activity: %s %d/min", 
+            current_channel, activity_bar.c_str(), (total_frames * 60) / max(1, (int)(millis()/1000)));
+    Serial.printf("│ %-52s │\n", activity_str);
+    
+    // Target and devices
+    char target_str[64];
+    if (target_found) {
+        int age_sec = (millis() - target_last_seen) / 1000;
+        sprintf(target_str, "🎯 Target: FOUND (-%ddBm, %ds ago) | 📱 Devices: %d", 
+                abs(target_rssi), age_sec, client_registry.size());
+    } else {
+        sprintf(target_str, "🎯 Target: SEARCHING... | 📱 Devices: %d", 
+                client_registry.size());
+    }
+    Serial.printf("│ %-52s │\n", target_str);
+    
+    // Security analysis
+    int secure = 0, open = 0;
+    for (const auto& kv : ap_registry) {
+        if (kv.second.security == "Open") open++;
+        else secure++;
+    }
+    int security_pct = (secure + open > 0) ? (secure * 100) / (secure + open) : 0;
+    
+    char security_str[64];
+    sprintf(security_str, "🏢 APs: %d | 🚨 Threats: %d | 🔒 Security: %d%%", 
+            ap_registry.size(), total_threats, security_pct);
+    Serial.printf("│ %-52s │\n", security_str);
+    
+    Serial.println("└─────────────────────────────────────────────────────┘");
+}
+
+// Network intelligence report
+void print_intelligence_report() {
+    // SILENT mode: NO REPORTS AT ALL
+    if (current_serial_mode == SILENT) return;
+    if (current_serial_mode == QUIET) return;
+    if (millis() - last_intelligence_report < 30000) return; // Every 30 seconds
+    
+    last_intelligence_report = millis();
+    
+    Serial.println("\n" + String(60, '='));
+    Serial.println("📊 NETWORK INTELLIGENCE REPORT");
+    Serial.println(String(60, '='));
+    
+    // Overview
+    float fps = (float)total_frames / max(1.0f, (float)(millis()/1000));
+    Serial.printf("🔸 Activity: %d frames (%.1f/sec, %s trend)\n", 
+                  total_frames, fps, fps > 10 ? "HIGH" : fps > 5 ? "NORMAL" : "LOW");
+    
+    // New discoveries notification
+    static int last_ap_count = 0;
+    static int last_client_count = 0;
+    
+    if (ap_registry.size() > last_ap_count) {
+        add_notification("NEW_DISCOVERY", 
+                        String("New AP discovered (total: ") + ap_registry.size() + ")", 2);
+    }
+    if (client_registry.size() > last_client_count) {
+        add_notification("NEW_DISCOVERY", 
+                        String("New device discovered (total: ") + client_registry.size() + ")", 2);
+    }
+    
+    last_ap_count = ap_registry.size();
+    last_client_count = client_registry.size();
+    
+    // Security assessment
+    int secure = 0, open = 0, wep = 0;
+    for (const auto& kv : ap_registry) {
+        if (kv.second.security == "Open") open++;
+        else if (kv.second.security == "WEP") wep++;
+        else secure++;
+    }
+    
+    if (open > 0) {
+        Serial.printf("🔸 Security WARNING: %d open networks detected!\n", open);
+        add_notification("SECURITY_RISK", 
+                        String("Open networks detected: ") + open, 2);
+    }
+    
+    // Channel analysis
+    Serial.printf("🔸 Channel distribution: ");
+    for (int ch = 1; ch <= 13; ch++) {
+        if (channel_stats[ch].ap_count > 0) {
+            Serial.printf("CH%d(%d) ", ch, channel_stats[ch].ap_count);
+        }
+    }
+    Serial.println();
+    
+    // Target status
+    if (target_found) {
+        int age_sec = (millis() - target_last_seen) / 1000;
+        Serial.printf("🔸 Target status: ACTIVE (%d dBm, %ds ago, %d TX/%d RX)\n", 
+                      target_rssi, age_sec, target_tx_packets, target_rx_packets);
+    } else {
+        Serial.println("🔸 Target status: SEARCHING... (scanning all channels)");
+    }
+    
+    Serial.println(String(60, '='));
+}
+
+// Device discovery notification
 void notify_new_device_smart(const String& mac, const String& vendor, const String& type, int rssi) {
+    // SILENT mode: NO DEVICE NOTIFICATIONS AT ALL
     if (current_serial_mode == SILENT) return;
     
     static std::set<String> notified_devices;
+    
     if (notified_devices.find(mac) == notified_devices.end()) {
         notified_devices.insert(mac);
-        String message = vendor + " device (" + type + ", " + rssi + "dBm)";
-        add_notification("NEW_DEVICE", message);
         
+        String signal_quality = rssi > -50 ? "Excellent" : rssi > -60 ? "Good" : rssi > -70 ? "Fair" : "Poor";
+        String message = vendor + " device (" + signal_quality + " signal, " + type + ")";
+        
+        add_notification("NEW_DEVICE", message, 2);
+        
+        // Cleanup old notifications to prevent memory leak
         if (notified_devices.size() > 100) {
             notified_devices.clear();
         }
@@ -1228,128 +1505,495 @@ void handle_touch_input() {
     }
 }
 
-// Simplified packet handler
+// Enhanced packet handler with target phone analysis
 void wifi_sniffer_packet_handler(void* buff, wifi_promiscuous_pkt_type_t type) {
-    if (type != WIFI_PKT_MISC) {
-        wifi_promiscuous_pkt_t* pkt = (wifi_promiscuous_pkt_t*)buff;
-        wifi_pkt_rx_ctrl_t ctrl = (wifi_pkt_rx_ctrl_t)pkt->rx_ctrl;
+    wifi_promiscuous_pkt_t* pkt = (wifi_promiscuous_pkt_t*)buff;
+    wifi_pkt_rx_ctrl_t ctrl = pkt->rx_ctrl;
+    
+    total_frames++;
+    channel_stats[current_channel].total_frames++;
+    channel_stats[current_channel].last_activity = millis();
+    
+    if (type == WIFI_PKT_MGMT) {
+        mgmt_frames++;
         
-        total_frames++;
-        channel_stats[current_channel].total_frames++;
-        channel_stats[current_channel].last_activity = millis();
-        
-        // Extract frame control field
-        uint16_t frame_control = pkt->payload[0] | (pkt->payload[1] << 8);
-        uint8_t frame_type = (frame_control >> 2) & 0x03;
-        uint8_t frame_subtype = (frame_control >> 4) & 0x0F;
-        
-        // Extract MAC addresses
+    uint16_t frame_control = pkt->payload[0] | (pkt->payload[1] << 8);
+    uint8_t frame_type = (frame_control >> 2) & 0x03;
+    uint8_t frame_subtype = (frame_control >> 4) & 0x0F;
+    
         uint8_t* addr1 = &pkt->payload[4];  // Destination
-        uint8_t* addr2 = &pkt->payload[10]; // Source
+        uint8_t* addr2 = &pkt->payload[10]; // Source  
         uint8_t* addr3 = &pkt->payload[16]; // BSSID
         
         String src_mac = mac_to_str(addr2);
         String dst_mac = mac_to_str(addr1);
         String bssid = mac_to_str(addr3);
         
-        // Track anomaly
+        // Print detailed management frame info
         String frame_type_str = "";
         switch (frame_subtype) {
-            case WIFI_BEACON_FRAME: frame_type_str = "BEACON"; mgmt_frames++; break;
-            case WIFI_PROBE_REQUEST: frame_type_str = "PROBE_REQ"; mgmt_frames++; break;
-            case WIFI_PROBE_RESPONSE: frame_type_str = "PROBE_RESP"; mgmt_frames++; break;
-            case WIFI_ASSOCIATION_REQUEST: frame_type_str = "ASSOC_REQ"; mgmt_frames++; break;
-            case WIFI_ASSOCIATION_RESPONSE: frame_type_str = "ASSOC_RESP"; mgmt_frames++; break;
-            case WIFI_DISASSOCIATION: frame_type_str = "DISASSOC"; mgmt_frames++; break;
-            case WIFI_AUTHENTICATION: frame_type_str = "AUTH"; mgmt_frames++; break;
-            case WIFI_DEAUTHENTICATION: frame_type_str = "DEAUTH"; mgmt_frames++; break;
-            default: frame_type_str = "MGMT"; mgmt_frames++; break;
+            case WIFI_BEACON_FRAME: frame_type_str = "BEACON"; break;
+            case WIFI_PROBE_REQUEST: frame_type_str = "PROBE_REQ"; break;
+            case WIFI_PROBE_RESPONSE: frame_type_str = "PROBE_RESP"; break;
+            case WIFI_ASSOCIATION_REQUEST: frame_type_str = "ASSOC_REQ"; break;
+            case WIFI_ASSOCIATION_RESPONSE: frame_type_str = "ASSOC_RESP"; break;
+            case WIFI_REASSOCIATION_REQUEST: frame_type_str = "REASSOC_REQ"; break;
+            case WIFI_REASSOCIATION_RESPONSE: frame_type_str = "REASSOC_RESP"; break;
+            case WIFI_DISASSOCIATION: frame_type_str = "DISASSOC"; break;
+            case WIFI_AUTHENTICATION: frame_type_str = "AUTH"; break;
+            case WIFI_DEAUTHENTICATION: frame_type_str = "DEAUTH"; break;
+            default: frame_type_str = "MGMT"; break;
         }
         
+        // Track anomaly
         track_anomaly(src_mac, frame_type_str, current_channel);
         
-        // Target phone detection
+        // Smart packet printing - only for debug/verbose modes with rate limiting
+        if (should_print_packet()) {
+            Serial.printf("[MGMT:%s] CH%d | RSSI:%d | %s→%s", 
+                         frame_type_str.c_str(), current_channel, ctrl.rssi, 
+                         src_mac.substring(9).c_str(), dst_mac.substring(9).c_str());
+        }
+        
+        // Enhanced target phone detection and analysis
+        bool is_target_involved = false;
+        String direction = "";
+        
         if (src_mac.equals(TARGET_PHONE) || dst_mac.equals(TARGET_PHONE)) {
+            is_target_involved = true;
+            
+            // First time target detection
             if (!target_found) {
-                target_found = true;
-                add_notification("TARGET_FOUND", String("Target detected! RSSI: ") + ctrl.rssi + "dBm");
+            target_found = true;
+                add_notification("TARGET_FOUND", 
+                               String("Target device detected! Signal: ") + ctrl.rssi + "dBm", 1);
             }
+            
             target_rssi = ctrl.rssi;
             target_last_seen = millis();
             
+            // Determine direction and frame type
+            if (src_mac.equals(TARGET_PHONE)) {
+                direction = "TX";
+                target_tx_packets++;
+            } else {
+                direction = "RX";
+                target_rx_packets++;
+            }
+            
+            // Only print target info in debug/verbose modes
+            if (should_print_packet()) {
+                Serial.printf(" [🎯%s", direction.c_str());
+            }
+            
+            // Try to extract SSID from probe requests
+            if (frame_subtype == WIFI_PROBE_REQUEST && src_mac.equals(TARGET_PHONE)) {
+                if (pkt->rx_ctrl.sig_len > 24) {
+                    uint8_t ssid_len = pkt->payload[25];
+                    if (ssid_len > 0 && ssid_len <= 32) {
+                        char ssid[33] = {0};
+                        memcpy(ssid, &pkt->payload[26], ssid_len);
+                        String new_ssid = String(ssid);
+                        
+                        if (target_ssid != new_ssid) {
+                            target_ssid = new_ssid;
+                            if (current_serial_mode != SILENT) {
+                                add_notification("TARGET_NETWORK", 
+                                               String("Target probing: ") + ssid, 2);
+                            }
+                        }
+                        
+                        if (should_print_packet()) {
+                        Serial.printf(" SSID:%s", ssid);
+                        }
+                    }
+                }
+            }
+            
+            // Try to extract association info
+            if (frame_subtype == WIFI_ASSOCIATION_REQUEST && src_mac.equals(TARGET_PHONE)) {
+                if (target_ap != bssid) {
+                target_ap = bssid;
+                    if (current_serial_mode != SILENT) {
+                        add_notification("TARGET_CONNECT", 
+                                       String("Target associating to AP: ") + bssid.substring(9), 2);
+                    }
+                }
+                
+                if (should_print_packet()) {
+                    Serial.printf(" AP:%s", bssid.substring(9).c_str());
+                }
+            }
+            
+            if (should_print_packet()) {
+    Serial.print("]");
+            }
+    
+            // Store packet info for display
+            if (target_packets.size() >= MAX_TARGET_PACKETS) {
+                target_packets.erase(target_packets.begin());
+            }
+            
+            TargetPacketInfo packet_info;
+            packet_info.timestamp = millis();
+            packet_info.frame_type = frame_type_str;
+            packet_info.rssi = ctrl.rssi;
+            packet_info.direction = direction;
+            packet_info.details = "";
+            target_packets.push_back(packet_info);
+        }
+        
+        // Process different management frame types
+      if (frame_subtype == WIFI_BEACON_FRAME) {
+            // Check if this is a new AP
+            bool is_new_ap = ap_registry.find(bssid) == ap_registry.end();
+            
+            // Update AP registry
+            APInfo& ap = ap_registry[bssid];
+            ap.bssid = bssid;
+            ap.channel = current_channel;
+            ap.rssi = ctrl.rssi;
+            ap.last_seen = millis();
+            ap.beacon_count++;
+            
+            String old_ssid = ap.ssid;
+            String old_security = ap.security;
+            
+            // Parse SSID
+        if (pkt->rx_ctrl.sig_len > 36) {
+          uint8_t ssid_len = pkt->payload[37];
+          if (ssid_len > 0 && ssid_len <= 32) {
+                    char ssid[33] = {0};
+                    memcpy(ssid, &pkt->payload[38], ssid_len);
+                    ap.ssid = String(ssid);
+                    
+                    if (should_print_packet()) {
+                    Serial.printf(" SSID:\"%s\"", ssid);
+                    }
+                }
+            }
+            
+            // Parse security
+            ap.security = get_security_from_beacon(pkt->payload, pkt->rx_ctrl.sig_len);
+            
+            if (should_print_packet()) {
+            Serial.printf(" SEC:%s", ap.security.c_str());
+            }
+            
+            // Notify about new AP discovery
+            if (is_new_ap && current_serial_mode != SILENT) {
+                String ap_name = ap.ssid.length() > 0 ? ap.ssid : "Hidden Network";
+                String message = String("\"") + ap_name + "\" (" + ap.security + ", CH" + current_channel + ")";
+                add_notification("NEW_AP", message, 2);
+                
+                // Security warning for open networks
+                if (ap.security == "Open") {
+                    add_notification("SECURITY_RISK", 
+                                   String("Open network detected: ") + ap_name, 2);
+                }
+            }
+            
+            // Update channel stats
+            if (is_new_ap) {
+            channel_stats[current_channel].ap_count++;
+            }
+            
+            // Track in device registry for serial output
+            DeviceInfo& device = device_registry[bssid];
+            device.mac = bssid;
+            device.rssi = ctrl.rssi;
+            device.last_seen = millis();
+            device.frame_count++;
+            device.device_type = "AP";
+            
+      } else if (frame_subtype == WIFI_PROBE_REQUEST) {
+            // Check if this is a new client device
+            bool is_new_client = client_registry.find(src_mac) == client_registry.end();
+            
+            // Track client devices
+            ClientInfo& client = client_registry[src_mac];
+            client.mac = src_mac;
+            client.rssi = ctrl.rssi;
+            client.last_seen = millis();
+            client.frame_count++;
+            client.vendor = get_vendor_from_mac(src_mac);
+            client.is_associated = false;
+            
+            if (should_print_packet()) {
+            Serial.printf(" VENDOR:%s", client.vendor.c_str());
+            }
+            
+            // Notify about new device discovery
+            if (is_new_client && src_mac != TARGET_PHONE && current_serial_mode != SILENT) {
+                notify_new_device_smart(src_mac, client.vendor, "Client", ctrl.rssi);
+            }
+            
+            // Try to associate with nearby APs based on timing and signal strength
+            String nearest_ap = find_closest_ap(src_mac, ctrl.rssi, millis());
+            if (nearest_ap.length() > 0) {
+                client.connected_ap = nearest_ap;
+            }
+            
+            // Track in device registry for serial output
+            DeviceInfo& device = device_registry[src_mac];
+            device.mac = src_mac;
+            device.rssi = ctrl.rssi;
+            device.last_seen = millis();
+            device.frame_count++;
+            device.device_type = "Client";
+            
+        } else if (frame_subtype == WIFI_ASSOCIATION_REQUEST || frame_subtype == WIFI_REASSOCIATION_REQUEST) {
+            // Client associating to AP
+            ClientInfo& client = client_registry[src_mac];
+            client.mac = src_mac;
+            client.connected_ap = bssid;
+            client.rssi = ctrl.rssi;
+            client.last_seen = millis();
+            client.frame_count++;
+            client.vendor = get_vendor_from_mac(src_mac);
+            client.is_associated = true;
+            
+            if (should_print_packet()) {
+            Serial.printf(" ASSOCIATING");
+            }
+            
+            // Notify about device association (not for target phone to avoid spam)
+            if (src_mac != TARGET_PHONE && current_serial_mode != SILENT) {
+                String ap_name = "Unknown AP";
+                if (ap_registry.find(bssid) != ap_registry.end()) {
+                    ap_name = ap_registry[bssid].ssid.length() > 0 ? 
+                             ap_registry[bssid].ssid : "Hidden AP";
+                }
+                add_notification("ASSOCIATION", 
+                               client.vendor + " device → " + ap_name, 3);
+            }
+            
+            // Track in device registry for serial output
+            DeviceInfo& device = device_registry[src_mac];
+            device.mac = src_mac;
+            device.rssi = ctrl.rssi;
+            device.last_seen = millis();
+            device.frame_count++;
+            device.device_type = "Client";
+            
+        } else if (frame_subtype == WIFI_ASSOCIATION_RESPONSE || frame_subtype == WIFI_REASSOCIATION_RESPONSE) {
+            // AP responding to association
+            if (client_registry.find(dst_mac) != client_registry.end()) {
+                client_registry[dst_mac].connected_ap = src_mac;
+                client_registry[dst_mac].is_associated = true;
+            }
+            
+            if (should_print_packet()) {
+            Serial.printf(" ASSOCIATED");
+            }
+            
+        } else if (frame_subtype == WIFI_DISASSOCIATION) {
+            // Client disconnecting
+            if (client_registry.find(src_mac) != client_registry.end()) {
+                client_registry[src_mac].is_associated = false;
+                client_registry[src_mac].connected_ap = "";
+                
+                // Notify about disconnection for non-target devices
+                if (src_mac != TARGET_PHONE && current_serial_mode != SILENT) {
+                    add_notification("DISCONNECTION", 
+                                   client_registry[src_mac].vendor + " device disconnected", 3);
+                }
+            }
+            
+            if (should_print_packet()) {
+            Serial.printf(" DISASSOCIATED");
+            }
+        }
+        
+        // Only add newline if we actually printed something
+        if (should_print_packet()) {
+        Serial.println();
+        }
+        
+    } else if (type == WIFI_PKT_DATA) {
+        data_frames++;
+        
+        // Track data frame activity
+        uint8_t* addr1 = &pkt->payload[4];  // Destination
+        uint8_t* addr2 = &pkt->payload[10]; // Source
+        
+        String src_mac = mac_to_str(addr2);
+        String dst_mac = mac_to_str(addr1);
+        
+        // Track anomaly
+        track_anomaly(src_mac, "DATA", current_channel);
+        
+        // Smart data frame printing - rate limited
+        if (should_print_packet()) {
+            Serial.printf("[DATA] CH%d | RSSI:%d | %s→%s", 
+                         current_channel, ctrl.rssi, 
+                         src_mac.substring(9).c_str(), dst_mac.substring(9).c_str());
+        }
+        
+        // Enhanced target phone data frame analysis
+        if (src_mac.equals(TARGET_PHONE) || dst_mac.equals(TARGET_PHONE)) {
+            // First time target detection
+            if (!target_found) {
+            target_found = true;
+                if (current_serial_mode != SILENT) {
+                    add_notification("TARGET_FOUND", 
+                                   String("Target device detected! Signal: ") + ctrl.rssi + "dBm", 1);
+                }
+            }
+            
+            target_rssi = ctrl.rssi;
+            target_last_seen = millis();
+            
+            String direction = src_mac.equals(TARGET_PHONE) ? "TX" : "RX";
             if (src_mac.equals(TARGET_PHONE)) {
                 target_tx_packets++;
             } else {
                 target_rx_packets++;
             }
-        }
-        
-        // Process management frames
-        if (type == WIFI_PKT_MGMT) {
-            if (frame_subtype == WIFI_BEACON_FRAME) {
-                // Update AP registry
-                APInfo& ap = ap_registry[bssid];
-                ap.bssid = bssid;
-                ap.channel = current_channel;
-                ap.rssi = ctrl.rssi;
-                ap.last_seen = millis();
-                ap.beacon_count++;
-                
-                // Parse SSID
-                if (pkt->rx_ctrl.sig_len > 36) {
-                    uint8_t ssid_len = pkt->payload[37];
-                    if (ssid_len > 0 && ssid_len <= 32) {
-                        char ssid[33] = {0};
-                        memcpy(ssid, &pkt->payload[38], ssid_len);
-                        ap.ssid = String(ssid);
+            
+            if (should_print_packet()) {
+                Serial.printf(" [🎯%s", direction.c_str());
+            }
+            
+            // Try to extract IP from data frame payload
+            if (pkt->rx_ctrl.sig_len > 30) {
+                // Look for IP patterns in payload (simplified)
+                for (int i = 30; i < min(pkt->rx_ctrl.sig_len - 4, 50); i++) {
+                    // Look for common IP patterns
+                    if (pkt->payload[i] == 192 && pkt->payload[i+1] == 168) {
+                        char ip_str[16];
+                        sprintf(ip_str, "%d.%d.%d.%d", 
+                                pkt->payload[i], pkt->payload[i+1], 
+                                pkt->payload[i+2], pkt->payload[i+3]);
+                        String new_ip = String(ip_str);
+                        
+                        if (target_ip != new_ip) {
+                            target_ip = new_ip;
+                            if (current_serial_mode != SILENT) {
+                                add_notification("TARGET_IP", 
+                                               String("Target IP detected: ") + ip_str, 2);
+                            }
+                        }
+                        
+                        if (should_print_packet()) {
+                        Serial.printf(" IP:%s", ip_str);
+                        }
+                        break;
                     }
                 }
-                
-                ap.security = get_security_from_beacon(pkt->payload, pkt->rx_ctrl.sig_len);
-                
-                if (ap_registry.find(bssid) == ap_registry.end()) {
-                    channel_stats[current_channel].ap_count++;
-                    add_notification("NEW_AP", String("AP: ") + ap.ssid + " (" + ap.security + ")");
-                }
-                
-            } else if (frame_subtype == WIFI_PROBE_REQUEST) {
-                // Track client devices
-                ClientInfo& client = client_registry[src_mac];
-                client.mac = src_mac;
-                client.rssi = ctrl.rssi;
-                client.last_seen = millis();
-                client.frame_count++;
-                client.vendor = get_vendor_from_mac(src_mac);
-                
-                if (client_registry.find(src_mac) == client_registry.end()) {
-                    notify_new_device_smart(src_mac, client.vendor, "Client", ctrl.rssi);
-                }
             }
-        } else if (type == WIFI_PKT_DATA) {
-            data_frames++;
-        } else if (type == WIFI_PKT_CTRL) {
-            ctrl_frames++;
+            
+            if (should_print_packet()) {
+            Serial.print("]");
+            }
+            
+            // Store data packet info
+            if (target_packets.size() >= MAX_TARGET_PACKETS) {
+                target_packets.erase(target_packets.begin());
+            }
+            
+            TargetPacketInfo packet_info;
+            packet_info.timestamp = millis();
+            packet_info.frame_type = "DATA";
+            packet_info.rssi = ctrl.rssi;
+            packet_info.direction = direction;
+            packet_info.details = "";
+            target_packets.push_back(packet_info);
         }
         
-        // Print packet info if enabled
+        // Update or create client entry for source
+        ClientInfo& src_client = client_registry[src_mac];
+        src_client.mac = src_mac;
+        src_client.frame_count++;
+        src_client.last_seen = millis();
+        src_client.rssi = ctrl.rssi;
+        if (src_client.vendor.length() == 0) {
+            src_client.vendor = get_vendor_from_mac(src_mac);
+        }
+        
+        // Associate with nearby AP if not already associated
+        if (src_client.connected_ap.length() == 0) {
+            String nearest_ap = find_closest_ap(src_mac, ctrl.rssi, millis());
+            if (nearest_ap.length() > 0) {
+                src_client.connected_ap = nearest_ap;
+            }
+        }
+        
+        // Track in device registry for serial output
+        DeviceInfo& device = device_registry[src_mac];
+        device.mac = src_mac;
+        device.rssi = ctrl.rssi;
+        device.last_seen = millis();
+        device.frame_count++;
+        device.device_type = "Client";
+    
+        // Only add newline if we actually printed something
         if (should_print_packet()) {
-            Serial.printf("[CH%d] [%s] [RSSI:%d] [SRC:%s] [DST:%s]\n", 
-                         current_channel, frame_type_str.c_str(), ctrl.rssi,
-                         src_mac.substring(9).c_str(), dst_mac.substring(9).c_str());
+    Serial.println();
+        }
+        
+    } else if (type == WIFI_PKT_CTRL) {
+        ctrl_frames++;
+        // Control frames are rarely interesting, only show in debug mode
+        if (current_serial_mode == DEBUG && should_print_packet()) {
+            Serial.printf("[CTRL] CH%d | RSSI:%d\n", current_channel, ctrl.rssi);
+        }
+        
+    } else {
+        // Catch any other packet types
+        ctrl_frames++; // Count as control for now
+        if (current_serial_mode == DEBUG && should_print_packet()) {
+            Serial.printf("[MISC] CH%d | RSSI:%d\n", current_channel, ctrl.rssi);
         }
     }
 }
 
-// Simple device notification (legacy compatibility)
+// Print device summary table
+void print_device_summary() {
+    Serial.println("\n" + String(50, '='));
+    Serial.println("📱 DEVICE SUMMARY TABLE");
+    Serial.println(String(50, '='));
+    
+    if (device_registry.empty()) {
+        Serial.println("No devices detected yet...");
+        return;
+    }
+    
+    Serial.printf("%-18s %-8s %-12s %-8s %s\n", "MAC Address", "RSSI", "Last Seen", "Frames", "Type");
+    Serial.println(String(60, '-'));
+    
+    for (const auto& kv : device_registry) {
+        const DeviceInfo& device = kv.second;
+        char age_str[10];
+        int age_sec = (millis() - device.last_seen) / 1000;
+        if (age_sec < 60) sprintf(age_str, "%ds ago", age_sec);
+        else sprintf(age_str, "%dm ago", age_sec/60);
+        
+        String rssi_str;
+        if (device.rssi > -50) rssi_str = "Excellent";
+        else if (device.rssi > -60) rssi_str = "Good";
+        else if (device.rssi > -70) rssi_str = "Fair";
+        else rssi_str = "Poor";
+        
+        Serial.printf("%-18s %-8s %-12s %-8d %s\n", 
+                     device.mac.c_str(), rssi_str.c_str(), age_str, device.frame_count, device.device_type.c_str());
+    }
+    
+    Serial.printf("\nTotal Devices: %d | Active APs: %d | Total Frames: %d\n", 
+                 device_registry.size(), ap_registry.size(), total_frames);
+}
+
+// Legacy notification functions - now use the smart notification system
 void notify_new_device(const String& mac, int rssi, const String& type) {
-    // Deprecated - use notify_new_device_smart() instead
+    // This function is deprecated - use notify_new_device_smart() instead
+    // Kept for compatibility but does nothing to avoid spam
 }
 
 void notify_lost_device(const String& mac) {
-    // Deprecated - kept for compatibility
+    // This function is deprecated - kept for compatibility but does nothing
 }
 
-// Simple serial command handler
+// Handle serial commands
 void handle_serial_commands() {
     if (Serial.available()) {
         char cmd = Serial.read();
@@ -1357,23 +2001,87 @@ void handle_serial_commands() {
         switch (cmd) {
             case 'h':
             case 'H':
-                Serial.println("Commands: h(help) s(stats) t(target) r(reset)");
-                Serial.println("Modes: 0(silent) q(quiet) n(normal) v(verbose) x(debug)");
+                Serial.println("\n" + String(50, '='));
+                Serial.println("🎯 ESP32 WiFi Sniffer - Help Menu");
+                Serial.println(String(50, '='));
+                Serial.println("Commands:");
+                Serial.println("  h - Show this help menu");
+                Serial.println("  s - Show device summary table");
+                Serial.println("  f - Show frame statistics");
+                Serial.println("  c - Show current channel info");
+                Serial.println("  t - Show target phone status");
+                Serial.println("  r - Reset all counters");
+                Serial.println("  p - Print all APs");
+                Serial.println("  d - Print all devices");
+                Serial.println("  0 - SILENT mode (critical alerts only)");
+                Serial.println("  q - QUIET mode (anomalies + discoveries)");
+                Serial.println("  n - NORMAL mode (intelligent summaries)");
+                Serial.println("  v - VERBOSE mode (rate-limited packets)");
+                Serial.println("  x - DEBUG mode (full technical details)");
+                Serial.println("  z - ANALYST mode (professional intelligence)");
+                Serial.println("  live - Show live dashboard");
+                Serial.println("  scan - Manual intelligence report");
+                Serial.println("  clear - Clear all notifications");
+                Serial.println("  modes - Show available serial modes");
+                Serial.println("  a - Show anomaly log");
+                Serial.println("  l - Show flagged MACs");
+                Serial.println(String(50, '='));
                 break;
                 
             case 's':
             case 'S':
-                Serial.printf("Stats: %d frames, %d APs, %d devices, CH%d\n", 
-                             total_frames, ap_registry.size(), client_registry.size(), current_channel);
+                print_device_summary();
+                break;
+                
+            case 'f':
+            case 'F':
+                Serial.println("\n" + String(40, '='));
+                Serial.println("📊 FRAME STATISTICS");
+                Serial.println(String(40, '='));
+                Serial.printf("Total Frames: %d\n", total_frames);
+                Serial.printf("Management: %d\n", mgmt_frames);
+                Serial.printf("Data: %d\n", data_frames);
+                Serial.printf("Control: %d\n", ctrl_frames);
+                Serial.printf("Current Channel: %d\n", current_channel);
+                Serial.printf("Uptime: %d seconds\n", millis()/1000);
+                Serial.println(String(40, '='));
+                break;
+                
+            case 'c':
+            case 'C':
+                Serial.println("\n" + String(40, '='));
+                Serial.println("📡 CHANNEL INFORMATION");
+                Serial.println(String(40, '='));
+                Serial.printf("Current Channel: %d\n", current_channel);
+                Serial.printf("Channel Switch Interval: %d ms\n", WIFI_CHANNEL_SWITCH_INTERVAL);
+                Serial.printf("Next Switch In: %d ms\n", WIFI_CHANNEL_SWITCH_INTERVAL - (millis() - last_channel_switch));
+                Serial.println(String(40, '='));
                 break;
                 
             case 't':
             case 'T':
+                Serial.println("\n" + String(40, '='));
+                Serial.println("🎯 TARGET PHONE STATUS");
+                Serial.println(String(40, '='));
                 if (target_found) {
-                    Serial.printf("Target: FOUND! RSSI: %d dBm\n", target_rssi);
+                    Serial.printf("Status: FOUND!\n");
+                    Serial.printf("MAC: %s\n", TARGET_PHONE);
+                    Serial.printf("Signal: %d dBm\n", target_rssi);
+                    Serial.printf("IP: %s\n", target_ip.c_str());
+                    Serial.printf("Network: %s\n", target_ssid.c_str());
+                    Serial.printf("TX Packets: %d\n", target_tx_packets);
+                    Serial.printf("RX Packets: %d\n", target_rx_packets);
+                    char age_str[20];
+                    int age_sec = (millis() - target_last_seen) / 1000;
+                    if (age_sec < 60) sprintf(age_str, "%d seconds ago", age_sec);
+                    else sprintf(age_str, "%d minutes ago", age_sec/60);
+                    Serial.printf("Last Seen: %s\n", age_str);
                 } else {
-                    Serial.println("Target: SEARCHING...");
+                    Serial.println("Status: SEARCHING...");
+                    Serial.printf("Target MAC: %s\n", TARGET_PHONE);
+                    Serial.printf("Current Channel: %d\n", current_channel);
                 }
+                Serial.println(String(40, '='));
                 break;
                 
             case 'r':
@@ -1382,14 +2090,173 @@ void handle_serial_commands() {
                 mgmt_frames = 0;
                 data_frames = 0;
                 ctrl_frames = 0;
-                Serial.println("Counters reset!");
+                device_registry.clear();
+                Serial.println("\n🔄 All counters reset!");
                 break;
                 
-            case '0': set_serial_mode(SILENT); break;
-            case 'q': case 'Q': set_serial_mode(QUIET); break;
-            case 'n': case 'N': set_serial_mode(NORMAL); break;
-            case 'v': case 'V': set_serial_mode(VERBOSE); break;
-            case 'x': case 'X': set_serial_mode(DEBUG); break;
+            case 'p':
+            case 'P':
+                Serial.println("\n" + String(50, '='));
+                Serial.println("📡 ACCESS POINTS");
+                Serial.println(String(50, '='));
+                for (const auto& kv : ap_registry) {
+                    const APInfo& ap = kv.second;
+                    char age_str[10];
+                    int age_sec = (millis() - ap.last_seen) / 1000;
+                    if (age_sec < 60) sprintf(age_str, "%ds ago", age_sec);
+                    else sprintf(age_str, "%dm ago", age_sec/60);
+                    
+                    Serial.printf("SSID: %s\n", ap.ssid.c_str());
+                    Serial.printf("BSSID: %s\n", ap.bssid.c_str());
+                    Serial.printf("Channel: %d | RSSI: %d dBm\n", ap.channel, ap.rssi);
+                    Serial.printf("Security: %s | Clients: %d\n", ap.security.c_str(), ap.client_count);
+                    Serial.printf("Last Seen: %s\n", age_str);
+                    Serial.println(String(30, '-'));
+                }
+                break;
+                
+            case 'd':
+            case 'D':
+                Serial.println("\n" + String(50, '='));
+                Serial.println("📱 CLIENT DEVICES");
+                Serial.println(String(50, '='));
+                for (const auto& kv : client_registry) {
+                    const ClientInfo& client = kv.second;
+                    char age_str[10];
+                    int age_sec = (millis() - client.last_seen) / 1000;
+                    if (age_sec < 60) sprintf(age_str, "%ds ago", age_sec);
+                    else sprintf(age_str, "%dm ago", age_sec/60);
+                    
+                    Serial.printf("MAC: %s\n", client.mac.c_str());
+                    Serial.printf("Vendor: %s\n", client.vendor.c_str());
+                    Serial.printf("RSSI: %d dBm | Frames: %d\n", client.rssi, client.frame_count);
+                    Serial.printf("Connected AP: %s\n", client.connected_ap.c_str());
+                    Serial.printf("Associated: %s\n", client.is_associated ? "Yes" : "No");
+                    Serial.printf("Last Seen: %s\n", age_str);
+                    Serial.println(String(30, '-'));
+                }
+                break;
+                
+            case '0':
+                set_serial_mode(SILENT);
+                break;
+                
+            case 'q':
+            case 'Q':
+                set_serial_mode(QUIET);
+                break;
+                
+            case 'n':
+            case 'N':
+                set_serial_mode(NORMAL);
+                break;
+                
+            case 'v':
+            case 'V':
+                set_serial_mode(VERBOSE);
+                break;
+                
+            case 'x':
+            case 'X':
+                set_serial_mode(DEBUG);
+                break;
+                
+            case 'z':
+            case 'Z':
+                set_serial_mode(ANALYST);
+                break;
+                
+            case 'a':
+            case 'A':
+                Serial.println("\n" + String(50, '='));
+                Serial.println("🚨 ANOMALY LOG");
+                Serial.println(String(50, '='));
+                if (anomaly_alerts.empty()) {
+                    Serial.println("No anomalies detected yet.");
+                } else {
+                    for (auto it = anomaly_alerts.rbegin(); it != anomaly_alerts.rend(); ++it) {
+                        char age_str[20];
+                        int age_sec = (millis() - it->timestamp) / 1000;
+                        if (age_sec < 60) sprintf(age_str, "%d seconds ago", age_sec);
+                        else sprintf(age_str, "%d minutes ago", age_sec/60);
+                        
+                        Serial.printf("MAC: %s\n", it->mac.c_str());
+                        Serial.printf("Threat: %s\n", it->threat_type.c_str());
+                        Serial.printf("Count: %d\n", it->count);
+                        Serial.printf("Time: %s\n", age_str);
+                        Serial.println(String(30, '-'));
+                    }
+                }
+                Serial.println(String(50, '='));
+                break;
+                
+            case 'l':
+            case 'L':
+                {
+                Serial.println("\n" + String(50, '='));
+                Serial.println("🚩 FLAGGED MACs");
+                Serial.println(String(50, '='));
+                int flagged_count = 0;
+                for (const auto& kv : anomaly_trackers) {
+                    if (kv.second.is_flagged) {
+                        Serial.printf("MAC: %s\n", kv.second.mac.c_str());
+                        Serial.printf("Threat: %s\n", kv.second.threat_type.c_str());
+                        Serial.printf("Last Seen: %d seconds ago\n", (millis() - kv.second.last_seen) / 1000);
+                        Serial.println(String(30, '-'));
+                        flagged_count++;
+                    }
+                }
+                if (flagged_count == 0) {
+                    Serial.println("No flagged MACs.");
+                }
+                Serial.println(String(50, '='));
+                }
+                break;
+                
+            default:
+                {
+                    // Check for multi-character commands
+                    String command = "";
+                    command += cmd;
+                    
+                    // Read additional characters for multi-char commands
+                    unsigned long cmd_start = millis();
+                    while (Serial.available() && millis() - cmd_start < 100) {
+                        char c = Serial.read();
+                        if (c == '\n' || c == '\r') break;
+                        command += c;
+                    }
+                    
+                    if (command == "live") {
+                        print_live_dashboard();
+                    } else if (command == "scan") {
+                        print_intelligence_report();
+                                    } else if (command == "clear") {
+                    recent_events.clear();
+                    Serial.println("📋 Notification history cleared!");
+                } else if (command == "modes") {
+                    Serial.println("\n🎛️  SERIAL OUTPUT MODES:");
+                    Serial.println("0 - SILENT:  Only critical alerts");
+                    Serial.println("q - QUIET:   Anomalies + new discoveries");  
+                    Serial.println("n - NORMAL:  Intelligent summaries (DEFAULT)");
+                    Serial.println("v - VERBOSE: Rate-limited packets");
+                    Serial.println("x - DEBUG:   Full technical details");
+                    Serial.println("z - ANALYST: Live dashboard");
+                    Serial.printf("\nCurrent mode: ");
+                    switch(current_serial_mode) {
+                        case SILENT: Serial.println("SILENT"); break;
+                        case QUIET: Serial.println("QUIET"); break;
+                        case NORMAL: Serial.println("NORMAL"); break;
+                        case VERBOSE: Serial.println("VERBOSE"); break;
+                        case DEBUG: Serial.println("DEBUG"); break;
+                        case ANALYST: Serial.println("ANALYST"); break;
+                    }
+                    } else if (command.length() > 1) {
+                        Serial.println("❌ Unknown command: " + command);
+                        Serial.println("Type 'h' for help");
+                    }
+                }
+                break;
         }
     }
 }
@@ -1537,12 +2404,13 @@ void loop() {
     
     // Channel hopping
     if (millis() - last_channel_switch > WIFI_CHANNEL_SWITCH_INTERVAL) {
-        current_channel = (current_channel % WIFI_CHANNEL_MAX) + 1;
-        esp_wifi_set_channel(current_channel, WIFI_SECOND_CHAN_NONE);
-        last_channel_switch = millis();
+  current_channel = (current_channel % WIFI_CHANNEL_MAX) + 1;
+  esp_wifi_set_channel(current_channel, WIFI_SECOND_CHAN_NONE);
+  last_channel_switch = millis();
         
-        if (current_serial_mode == DEBUG) {
-            add_notification("CHANNEL_SWITCH", String("Channel ") + current_channel);
+        // Notify about channel switching using the notification system
+        if (current_serial_mode == DEBUG && current_serial_mode != SILENT) {
+            add_notification("CHANNEL_SWITCH", String("Channel ") + current_channel, 3);
         }
     }
     
@@ -1558,12 +2426,18 @@ void loop() {
         last_anomaly_check = millis();
     }
     
-    // Simple status report every 30 seconds
-    static unsigned long last_status_report = 0;
-    if (millis() - last_status_report > 30000 && current_serial_mode != SILENT) {
-        Serial.printf("Status: %d frames, %d APs, %d devices, CH%d\n", 
-                     total_frames, ap_registry.size(), client_registry.size(), current_channel);
-        last_status_report = millis();
+    // Smart dashboard and intelligence reporting
+    if (current_serial_mode == SILENT) {
+        // SILENT mode: NO OUTPUT AT ALL
+        // Do nothing - completely silent
+    } else if (current_serial_mode == ANALYST) {
+        // Live dashboard mode - update every 10 seconds
+        if (millis() - last_dashboard_update > 10000) {
+            print_live_dashboard();
+        }
+    } else {
+        // Intelligence reports based on mode
+        print_intelligence_report(); // Has its own 30-second rate limiting
     }
     
     // Animate title
@@ -1574,10 +2448,10 @@ void loop() {
     color.ch.blue = (uint8_t)(pulse * 255);
     lv_obj_set_style_text_color(title_label, color, LV_PART_MAIN);
     
-    // Clean up old entries every 60 seconds
+    // Clean up only very old entries every 60 seconds (KEEP MORE HISTORY)
     static unsigned long last_cleanup = 0;
     if (millis() - last_cleanup > 60000) {
-        // Remove old APs (5 minutes)
+        // Remove only very old APs (5 minutes)
         for (auto it = ap_registry.begin(); it != ap_registry.end();) {
             if (millis() - it->second.last_seen > 300000) {
                 it = ap_registry.erase(it);
@@ -1585,7 +2459,7 @@ void loop() {
                 ++it;
             }
         }
-        // Remove old clients (2 minutes)  
+        // Remove only very old clients (2 minutes)  
         for (auto it = client_registry.begin(); it != client_registry.end();) {
             if (millis() - it->second.last_seen > 120000) {
                 it = client_registry.erase(it);
@@ -1594,7 +2468,7 @@ void loop() {
             }
         }
         
-        // Reset channel stats if old
+        // Reset channel stats only if very old
         for (int i = 1; i <= 13; i++) {
             if (millis() - channel_stats[i].last_activity > 60000) {
                 channel_stats[i].ap_count = 0;
@@ -1602,7 +2476,7 @@ void loop() {
             }
         }
         
-        // Check if target is still active
+        // Check if target is still active (longer timeout)
         if (target_found && millis() - target_last_seen > 60000) {
             target_found = false;
         }
